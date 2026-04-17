@@ -3,7 +3,7 @@ import json
 
 
 def fetch_weather_data():
-    # Example: Fetching current weather for New York City
+    #  Fetching current weather for New York City
     url = "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.0060&current_weather=true&temperature_unit=fahrenheit&wind_speed_unit=mph"
 
     try:
