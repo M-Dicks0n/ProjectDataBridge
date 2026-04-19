@@ -1,5 +1,6 @@
 import requests
 import json
+import sqlite3
 
 
 def fetch_weather_data():
@@ -38,12 +39,50 @@ def transform_data(raw_json):
     return transformed_data
 
 
+def load_data(transformed_data):
+    print("Initializing connection to database...")
+    conn = sqlite3.connect("weather_data.db")
+    cursor = conn.cursor()
+    print("Connected to database. System standing by")
+
+    create_table = """
+                   CREATE TABLE IF NOT EXISTS weather_log 
+                   ( 
+                       id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                       timestamp TEXT NOT NULL,
+                       temperature REAL,
+                       wind_speed REAL
+                   ); 
+                   """
+    cursor.execute(create_table)
+
+    insert_sql = """
+                 INSERT INTO weather_log (timestamp, temperature, wind_speed)
+                 VALUES (?, ?, ?);
+                 """
+
+    data_tuple = (
+        transformed_data.get("Time"),
+        transformed_data.get("Temperature"),
+        transformed_data.get("Wind_speed")
+    )
+    print("Data  logged.")
+
+    cursor.execute(insert_sql, data_tuple)
+    conn.commit()
+    conn.close()
+    print("Disconnected from database.")
+
+
+
 if __name__ == "__main__":
-    print("Initiating Connection...")
+    print("Initiating Program...")
     weather_data = fetch_weather_data()
 
     if weather_data:
         clean_data = transform_data(weather_data)
         print(json.dumps(clean_data, indent=4))
+        load_data(clean_data)
+        print("Good Bye.")
     else:
         print("Error Retrieving Data.")
