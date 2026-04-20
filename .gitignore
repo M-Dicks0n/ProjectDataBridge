@@ -1,4 +1,20 @@
+# Python bytecode
 __pycache__/
-.env
-*.venv/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDEs
 .idea/
+.vscode/
+
+# Local configuration/Secrets
+.env
+
+# Data (Analytical Choice)
+data/*.db
+data/*.json
