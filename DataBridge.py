@@ -1,16 +1,24 @@
 import requests
 import json
 import sqlite3
+import os
 
+def load_config(config="config.json"):
+    #load location and unit settings from cofig.json
+    with open(config, "r") as f:
+        return json.load(f)
 
-def fetch_weather_data():
-    #  Fetching current weather for New York City
-    url = "https://api.open-meteo.com/v1/forecast?latitude=40.7128&longitude=-74.0060&current_weather=true&temperature_unit=fahrenheit&wind_speed_unit=mph"
-
+def fetch_weather_data(latitude, longitude, units):
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={latitude}&longitude={longitude}"
+        f"&current_weather=true"
+        f"&temperature_unit={units['temperature']}"
+        f"&wind_speed_unit={units['wind_speed']}"
+    )
     try:
         response = requests.get(url)
         response.raise_for_status()
-        #  visual confirmation
         print("Status: 200 OK - Connection Successful!\n")
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -18,20 +26,19 @@ def fetch_weather_data():
         return None
 
 
-def transform_data(raw_json):
-    print("Processing Data...")
+def transform_data(raw_json, location_name):
+    """Parse the API response into a clean, structured record."""
+    print(f"    Processing data for {location_name}...")
 
     current_node = raw_json.get("current_weather", {})
     clean_temp = float(current_node.get("temperature", 0.0))
-    ''' TODO add real feel
-    #clean_feel = float(current_node.get("apparent_temperature",
-                                        0.0))  
-    '''
     clean_wind = float(current_node.get("windspeed", 0.0))
     raw_time = current_node.get("time", "2020-01-01T00:00:00Z")
     clean_time = raw_time.replace("T", " ")
 
+    # TODO (Day 2): Add apparent_temperature and humidity
     transformed_data = {
+        "Location": location_name,
         "Time": clean_time,
         "Temperature": clean_temp,
         "Wind_speed": clean_wind,
@@ -40,49 +47,86 @@ def transform_data(raw_json):
 
 
 def load_data(transformed_data):
-    print("Initializing connection to database...")
+    """Insert a single weather record into the SQLite database."""
+    os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect("data/weather_data.db")
     cursor = conn.cursor()
-    print("Connected to database. System standing by")
 
+    # Schema now includes a location column to support multi-city data
     create_table = """
-                   CREATE TABLE IF NOT EXISTS weather_log 
-                   ( 
-                       id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                       timestamp TEXT NOT NULL,
-                       temperature REAL,
-                       wind_speed REAL
-                   ); 
+                   CREATE TABLE IF NOT EXISTS weather_log \
+                   ( \
+                       id \
+                       INTEGER \
+                       NOT \
+                       NULL \
+                       PRIMARY \
+                       KEY \
+                       AUTOINCREMENT, \
+                       location \
+                       TEXT \
+                       NOT \
+                       NULL, \
+                       timestamp \
+                       TEXT \
+                       NOT \
+                       NULL, \
+                       temperature \
+                       REAL, \
+                       wind_speed \
+                       REAL
+                   ); \
                    """
     cursor.execute(create_table)
 
     insert_sql = """
-                 INSERT INTO weather_log (timestamp, temperature, wind_speed)
-                 VALUES (?, ?, ?);
+                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed)
+                 VALUES (?, ?, ?, ?); \
                  """
-
     data_tuple = (
+        transformed_data.get("Location"),
         transformed_data.get("Time"),
         transformed_data.get("Temperature"),
-        transformed_data.get("Wind_speed")
+        transformed_data.get("Wind_speed"),
     )
-    print("Data  logged.")
-
     cursor.execute(insert_sql, data_tuple)
     conn.commit()
     conn.close()
-    print("Disconnected from database.")
+    print(f"    Logged to database.")
 
 
+def run_pipeline(config_path="config.json"):
+    """
+     Iterates over all locations defined in config.json
+    """
+    config = load_config(config_path)
+    locations = config["locations"]
+    units = config["units"]
+
+    print(f"DataBridge V2 — Loading weather for {len(locations)} location(s)...\n")
+
+    results = []
+    for loc in locations:
+        name = loc["name"]
+        lat = loc["latitude"]
+        lon = loc["longitude"]
+
+        print(f"[{name}]")
+        raw_data = fetch_weather_data(lat, lon, units)
+
+        if raw_data:
+            clean_data = transform_data(raw_data, name)
+            print(json.dumps(clean_data, indent=4))
+            load_data(clean_data)
+            results.append(clean_data)
+        else:
+            print(f"    Skipping {name} due to fetch error.")
+
+        print()
+
+    print(f"Pipeline complete. {len(results)}/{len(locations)} location(s) processed successfully.")
+    return results
 
 if __name__ == "__main__":
     print("Initiating Program...")
-    weather_data = fetch_weather_data()
-
-    if weather_data:
-        clean_data = transform_data(weather_data)
-        print(json.dumps(clean_data, indent=4))
-        load_data(clean_data)
-        print("Good Bye.")
-    else:
-        print("Error Retrieving Data.")
+    run_pipeline()

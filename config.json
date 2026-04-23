@@ -1,0 +1,23 @@
+{
+  "locations": [
+    {
+      "name": "New York City",
+      "latitude": 40.7128,
+      "longitude": -74.0060
+    },
+    {
+      "name": "Philadelphia",
+      "latitude": 39.9526,
+      "longitude": -75.1652
+    },
+    {
+      "name": "Bucks County",
+      "latitude": 40.3468,
+      "longitude": -75.1302
+    }
+  ],
+  "units": {
+    "temperature": "fahrenheit",
+    "wind_speed": "mph"
+  }
+}
