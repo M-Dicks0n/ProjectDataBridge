@@ -13,6 +13,7 @@ def fetch_weather_data(latitude, longitude, units):
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={latitude}&longitude={longitude}"
         f"&current_weather=true"
+        f"&hourly=apparent_temperature,precipitation_probability,relativehumidity_2m"
         f"&temperature_unit={units['temperature']}"
         f"&wind_speed_unit={units['wind_speed']}"
     )
@@ -35,13 +36,26 @@ def transform_data(raw_json, location_name):
     clean_wind = float(current_node.get("windspeed", 0.0))
     raw_time = current_node.get("time", "2020-01-01T00:00:00Z")
     clean_time = raw_time.replace("T", " ")
+    # Find the hourly index that matches the current hour
+    current_hour = raw_time[:13]  # e.g. "2026-05-06T18"
+    hourly_times = raw_json.get("hourly", {}).get("time", [])
+    hourly_index = next(
+        (i for i, t in enumerate(hourly_times) if t.startswith(current_hour)), 0
+    )
 
-    # TODO (Day 2): Add apparent_temperature and humidity
+    # Extract new metrics at the matched index
+    apparent_temp = float(raw_json["hourly"]["apparent_temperature"][hourly_index])
+    precip_prob = int(raw_json["hourly"]["precipitation_probability"][hourly_index])
+    humidity = int(raw_json["hourly"]["relativehumidity_2m"][hourly_index])
+
     transformed_data = {
         "Location": location_name,
         "Time": clean_time,
         "Temperature": clean_temp,
         "Wind_speed": clean_wind,
+        "Apparent_temperature": apparent_temp,
+        "Precipitation_probability": precip_prob,
+        "Humidity": humidity,
     }
     return transformed_data
 
@@ -52,42 +66,34 @@ def load_data(transformed_data):
     conn = sqlite3.connect("data/weather_data.db")
     cursor = conn.cursor()
 
-    # Schema now includes a location column to support multi-city data
     create_table = """
-                   CREATE TABLE IF NOT EXISTS weather_log \
-                   ( \
-                       id \
-                       INTEGER \
-                       NOT \
-                       NULL \
-                       PRIMARY \
-                       KEY \
-                       AUTOINCREMENT, \
-                       location \
-                       TEXT \
-                       NOT \
-                       NULL, \
-                       timestamp \
-                       TEXT \
-                       NOT \
-                       NULL, \
-                       temperature \
-                       REAL, \
-                       wind_speed \
-                       REAL
-                   ); \
+                   CREATE TABLE IF NOT EXISTS weather_log
+                   (
+                       id                        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                       location                  TEXT NOT NULL,
+                       timestamp                 TEXT NOT NULL,
+                       temperature               REAL,
+                       wind_speed                REAL,
+                       apparent_temperature      REAL,
+                       precipitation_probability INTEGER,
+                       humidity                  INTEGER
+                   );
                    """
     cursor.execute(create_table)
 
     insert_sql = """
-                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed)
-                 VALUES (?, ?, ?, ?); \
+                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed,
+                                         apparent_temperature, precipitation_probability, humidity)
+                 VALUES (?, ?, ?, ?, ?, ?, ?);
                  """
     data_tuple = (
         transformed_data.get("Location"),
         transformed_data.get("Time"),
         transformed_data.get("Temperature"),
         transformed_data.get("Wind_speed"),
+        transformed_data.get("Apparent_temperature"),
+        transformed_data.get("Precipitation_probability"),
+        transformed_data.get("Humidity"),
     )
     cursor.execute(insert_sql, data_tuple)
     conn.commit()
