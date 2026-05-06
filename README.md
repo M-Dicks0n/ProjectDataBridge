@@ -33,7 +33,8 @@ pip install -r requirements.txt
 (Please ensure you have generated a requirements.txt file in your repo.)
 
 ## Usage
-The pipeline is designed to be executed via the command line or imported as a module. To run the default extraction and transformation:
+python DataBridge.py
+
 
 Python
 from databridge import WeatherPipeline
