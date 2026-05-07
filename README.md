@@ -1,9 +1,9 @@
 
-##### DataBridge: Weather Data ETL Pipeline
+# DataBridge: Weather Data ETL Pipeline
 Project DataBridge started as a simple weather scraping application and has since been expanded into a multi-location ETL (Extract, Transform, Load) pipeline. V2 (technically my still V0.2) adds richer meteorological metrics and a CSV export layer designed to feed into Ensemble, a companion R-based wardrobe recommendation model.
 
 
-#### Core Features:
+### Core Features:
 Automated Extraction for multiple locations:Pulls current weather data for multiple locations defined in config.json, replacing the original single hardcoded endpoint.
 Expanded Metrics: Captures temperature, wind speed, apparent temperature (real feel), precipitation probability, and humidity.
 Data Transformation: Handles complex JSON payloads, converting raw API responses into standardized formats.
@@ -38,5 +38,5 @@ data = pipeline.run()
 print(data)
 
 
-# Related Projects:
+##### Related Projects:
 Ensemble — R-based ML wardrobe recommender that ingests DataBridge output.
