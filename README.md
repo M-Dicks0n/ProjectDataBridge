@@ -5,7 +5,7 @@ Project DataBridge started as a simple weather scraping application and has sinc
 
 ### Core Features:
 - **Automated Extraction for multiple locations:** Pulls current weather data for multiple locations defined in config.json, replacing the original single hardcoded endpoint.
-- **Expanded Metrics: Captures temperature, wind speed, apparent temperature (real feel), precipitation probability, and humidity.
+- **Expanded Metrics:** Captures temperature, wind speed, apparent temperature (real feel), precipitation probability, and humidity.
 - **Data Transformation:** Handles complex JSON payloads, converting raw API responses into standardized formats.
 - **Unit Conversion:** Integrated logic for converting meteorological units (e.g., Temperature, Wind Speed (potenally real feel)) to meet specific project requirements.
 - **Modular Architecture:** Designed as a "standalone" application that has a .csv, .log. and db file for other programs. 
