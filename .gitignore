@@ -18,3 +18,4 @@ ENV/
 # Data
 data/*.db
 data/*.json
+data/*.log

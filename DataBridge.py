@@ -82,8 +82,7 @@ def load_data(transformed_data):
     cursor.execute(create_table)
 
     insert_sql = """
-                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed,
-                                         apparent_temperature, precipitation_probability, humidity)
+                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed,apparent_temperature, precipitation_probability, humidity)
                  VALUES (?, ?, ?, ?, ?, ?, ?);
                  """
     data_tuple = (
@@ -100,6 +99,27 @@ def load_data(transformed_data):
     conn.close()
     print(f"    Logged to database.")
 
+def export_to_csv(db_path='data/weather_data.db', csv_path='data/ensemble_input.csv'):
+    """Export the data/record per location to a CSV file for later use(project ensemble)."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    query = """
+            SELECT location, timestamp, temperature, wind_speed,apparent_temperature, precipitation_probability, humidity
+            FROM weather_log
+            WHERE id IN (
+                SELECT MAX(id) FROM weather_log GROUP BY location
+            )
+            ORDER BY location;
+            """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    os.makedirs('data', exist_ok=True)
+    with open(csv_path, 'w', newline='') as f:
+        f.write("location,timestamp,temperature,wind_speed,apparent_temperature,precipitation_probability,humidity\n")
+        for row in rows:
+            f.write(",".join(str(val) for val in row) + "\n")
+    print(f"    Data exported to ->{csv_path}")
 
 def run_pipeline(config_path="config.json"):
     """
@@ -131,7 +151,21 @@ def run_pipeline(config_path="config.json"):
         print()
 
     print(f"Pipeline complete. {len(results)}/{len(locations)} location(s) processed successfully.")
+    export_to_csv()
+    log_run_pipeline(results, locations)
     return results
+
+def log_run_pipeline(results, locations):
+    """Append a summary log entry after each pipeline run."""
+    os.makedirs("data", exist_ok=True)
+    with open("data/pipeline.log", "a") as f:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"[{timestamp}] Pipeline run — {len(results)}/{len(locations)} cities processed successfully.\n")
+        for record in results:
+            f.write(
+                f"    {record['Location']} | Temp: {record['Temperature']}°F | Humidity: {record['Humidity']}% | Precip: {record['Precipitation_probability']}%\n")
+    print(f"Run logged → data/pipeline.log")
 
 if __name__ == "__main__":
     print("Initiating Program...")
