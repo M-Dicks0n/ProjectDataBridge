@@ -2,20 +2,23 @@ import requests
 import json
 import sqlite3
 import os
+from datetime import datetime
+
 
 def load_config(config="config.json"):
-    #load location and unit settings from cofig.json
+    """Load location and unit settings from config.json"""
     with open(config, "r") as f:
         return json.load(f)
+
 
 def fetch_weather_data(latitude, longitude, units):
     url = (
         f"https://api.open-meteo.com/v1/forecast"
         f"?latitude={latitude}&longitude={longitude}"
         f"&current_weather=true"
-        f"&hourly=apparent_temperature,precipitation_probability,relativehumidity_2m"
         f"&temperature_unit={units['temperature']}"
         f"&wind_speed_unit={units['wind_speed']}"
+        f"&hourly=apparent_temperature,precipitation_probability,relativehumidity_2m,windspeed_10m"
     )
     try:
         response = requests.get(url)
@@ -28,36 +31,29 @@ def fetch_weather_data(latitude, longitude, units):
 
 
 def transform_data(raw_json, location_name):
-    """Parse the API response into a clean, structured record."""
-    print(f"    Processing data for {location_name}...")
+    """Extract all 24 hourly forecast rows for tomorrow (indices 24-47)."""
+    print(f"  Processing forecast for {location_name}...")
 
-    current_node = raw_json.get("current_weather", {})
-    clean_temp = float(current_node.get("temperature", 0.0))
-    clean_wind = float(current_node.get("windspeed", 0.0))
-    raw_time = current_node.get("time", "2020-01-01T00:00:00Z")
-    clean_time = raw_time.replace("T", " ")
-    # Find the hourly index that matches the current hour
-    current_hour = raw_time[:13]  # e.g. "2026-05-06T18"
-    hourly_times = raw_json.get("hourly", {}).get("time", [])
-    hourly_index = next(
-        (i for i, t in enumerate(hourly_times) if t.startswith(current_hour)), 0
-    )
+    hourly = raw_json.get("hourly", {})
+    times = hourly.get("time", [])
+    apparent_temps = hourly.get("apparent_temperature", [])
+    precip_probs = hourly.get("precipitation_probability", [])
+    humidities = hourly.get("relativehumidity_2m", [])
+    wind_speeds = hourly.get("windspeed_10m", [])
 
-    # Extract new metrics at the matched index
-    apparent_temp = float(raw_json["hourly"]["apparent_temperature"][hourly_index])
-    precip_prob = int(raw_json["hourly"]["precipitation_probability"][hourly_index])
-    humidity = int(raw_json["hourly"]["relativehumidity_2m"][hourly_index])
+    records = []
+    max_index = min(48, len(times))
+    for i in range(24, max_index):
+        records.append({
+            "Location": location_name,
+            "Forecast_datetime": times[i].replace("T", " "),
+            "Apparent_temperature": float(apparent_temps[i]),
+            "Precipitation_probability": int(precip_probs[i]),
+            "Humidity": int(humidities[i]),
+            "Wind_speed": float(wind_speeds[i]),
+        })
 
-    transformed_data = {
-        "Location": location_name,
-        "Time": clean_time,
-        "Temperature": clean_temp,
-        "Wind_speed": clean_wind,
-        "Apparent_temperature": apparent_temp,
-        "Precipitation_probability": precip_prob,
-        "Humidity": humidity,
-    }
-    return transformed_data
+    return records
 
 
 def load_data(transformed_data):
@@ -82,49 +78,59 @@ def load_data(transformed_data):
     cursor.execute(create_table)
 
     insert_sql = """
-                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed,apparent_temperature, precipitation_probability, humidity)
+                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed, apparent_temperature, \
+                                          precipitation_probability, humidity)
                  VALUES (?, ?, ?, ?, ?, ?, ?);
                  """
+
+
     data_tuple = (
         transformed_data.get("Location"),
-        transformed_data.get("Time"),
-        transformed_data.get("Temperature"),
+        transformed_data.get("Forecast_datetime"),
+        transformed_data.get("Apparent_temperature"),
         transformed_data.get("Wind_speed"),
         transformed_data.get("Apparent_temperature"),
         transformed_data.get("Precipitation_probability"),
         transformed_data.get("Humidity"),
     )
+
     cursor.execute(insert_sql, data_tuple)
     conn.commit()
     conn.close()
-    print(f"    Logged to database.")
 
-def export_to_csv(db_path='data/weather_data.db', csv_path='data/ensemble_input.csv'):
-    """Export the data/record per location to a CSV file for later use(project ensemble)."""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    query = """
-            SELECT location, timestamp, temperature, wind_speed,apparent_temperature, precipitation_probability, humidity
-            FROM weather_log
-            WHERE id IN (
-                SELECT MAX(id) FROM weather_log GROUP BY location
-            )
-            ORDER BY location;
-            """
-    cursor.execute(query)
-    rows = cursor.fetchall()
-    conn.close()
+
+def export_to_csv(all_records, csv_path='data/ensemble_input.csv'):
+    """Write one row per forecast hour per location."""
     os.makedirs('data', exist_ok=True)
     with open(csv_path, 'w', newline='') as f:
-        f.write("location,timestamp,temperature,wind_speed,apparent_temperature,precipitation_probability,humidity\n")
-        for row in rows:
-            f.write(",".join(str(val) for val in row) + "\n")
-    print(f"    Data exported to ->{csv_path}")
+        f.write("location,forecast_datetime,apparent_temperature,precipitation_probability,humidity,wind_speed\n")
+        for record in all_records:
+            f.write(
+                f"{record['Location']},"
+                f"{record['Forecast_datetime']},"
+                f"{record['Apparent_temperature']},"
+                f"{record['Precipitation_probability']},"
+                f"{record['Humidity']},"
+                f"{record['Wind_speed']}\n"
+            )
+    print(f"  Exported {len(all_records)} forecast rows → {csv_path}")
+
+
+def log_run_pipeline(results, locations):
+    """Append a summary log entry after each pipeline run."""
+    os.makedirs("data", exist_ok=True)
+    with open("data/pipeline.log", "a") as f:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"[{timestamp}] Pipeline run — {len(results)}/{len(locations)} cities processed successfully.\n")
+        for record in results:
+            f.write(
+                f"    {record['Location']} | Apparent Temp: {record['Apparent_temperature']}° | Humidity: {record['Humidity']}% | Precip: {record['Precipitation_probability']}%\n"
+            )
+    print(f"Run logged → data/pipeline.log")
+
 
 def run_pipeline(config_path="config.json"):
-    """
-     Iterates over all locations defined in config.json
-    """
+    """Iterates over all locations defined in config.json."""
     config = load_config(config_path)
     locations = config["locations"]
     units = config["units"]
@@ -132,41 +138,37 @@ def run_pipeline(config_path="config.json"):
     print(f"DataBridge V2 — Loading weather for {len(locations)} location(s)...\n")
 
     results = []
+    all_forecast_rows = []
+
     for loc in locations:
         name = loc["name"]
         lat = loc["latitude"]
         lon = loc["longitude"]
-
         print(f"[{name}]")
+
         raw_data = fetch_weather_data(lat, lon, units)
-
         if raw_data:
-            clean_data = transform_data(raw_data, name)
-            print(json.dumps(clean_data, indent=4))
-            load_data(clean_data)
-            results.append(clean_data)
+            records = transform_data(raw_data, name)
+            for r in records:
+                load_data(r)
+
+            all_forecast_rows.extend(records)
+
+            # Store the first record of the day for the summary log
+            if records:
+                results.append(records[0])
         else:
-            print(f"    Skipping {name} due to fetch error.")
+            print(f"  Skipping {name} due to fetch error.")
 
-        print()
 
-    print(f"Pipeline complete. {len(results)}/{len(locations)} location(s) processed successfully.")
-    export_to_csv()
+    print(f"\nPipeline complete. {len(results)} location(s) processed successfully.")
+    export_to_csv(all_forecast_rows)
     log_run_pipeline(results, locations)
-    return results
 
-def log_run_pipeline(results, locations):
-    """Append a summary log entry after each pipeline run."""
-    os.makedirs("data", exist_ok=True)
-    with open("data/pipeline.log", "a") as f:
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"[{timestamp}] Pipeline run — {len(results)}/{len(locations)} cities processed successfully.\n")
-        for record in results:
-            f.write(
-                f"    {record['Location']} | Temp: {record['Temperature']}°F | Humidity: {record['Humidity']}% | Precip: {record['Precipitation_probability']}%\n")
-    print(f"Run logged → data/pipeline.log")
+    return all_forecast_rows
+
 
 if __name__ == "__main__":
     print("Initiating Program...")
     run_pipeline()
+    print("Program complete.")
