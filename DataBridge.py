@@ -57,7 +57,7 @@ def transform_data(raw_json, location_name):
 
 
 def load_data(transformed_data):
-    """Insert a single weather record into the SQLite database."""
+    """Insert a single weather record into the SQLite database. Real feel= apparent_temperature """
     os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect("data/weather_data.db")
     cursor = conn.cursor()
@@ -154,7 +154,6 @@ def run_pipeline(config_path="config.json"):
 
             all_forecast_rows.extend(records)
 
-            # Store the first record of the day for the summary log
             if records:
                 results.append(records[0])
         else:
