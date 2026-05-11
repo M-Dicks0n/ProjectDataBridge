@@ -68,7 +68,6 @@ def load_data(transformed_data):
                        id                        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                        location                  TEXT NOT NULL,
                        timestamp                 TEXT NOT NULL,
-                       temperature               REAL,
                        wind_speed                REAL,
                        apparent_temperature      REAL,
                        precipitation_probability INTEGER,
@@ -78,16 +77,15 @@ def load_data(transformed_data):
     cursor.execute(create_table)
 
     insert_sql = """
-                 INSERT INTO weather_log (location, timestamp, temperature, wind_speed, apparent_temperature, \
+                 INSERT INTO weather_log (location, timestamp, wind_speed, apparent_temperature, \
                                           precipitation_probability, humidity)
-                 VALUES (?, ?, ?, ?, ?, ?, ?);
+                 VALUES (?, ?, ?, ?, ?, ?);
                  """
 
 
     data_tuple = (
         transformed_data.get("Location"),
         transformed_data.get("Forecast_datetime"),
-        transformed_data.get("Apparent_temperature"),
         transformed_data.get("Wind_speed"),
         transformed_data.get("Apparent_temperature"),
         transformed_data.get("Precipitation_probability"),
